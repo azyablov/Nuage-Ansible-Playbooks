@@ -1,0 +1,5 @@
+virsh destroy vsc4_nullab
+virsh undefine vsc4_nullab
+rm -rf /home/vms/vsc4_nullab
+/opt/vsd/ejbca/deploy/certMgmt.sh -a revoke -u vsc4 -o csp
+Deleted end entity with username: vsc4

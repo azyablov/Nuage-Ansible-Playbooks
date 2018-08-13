@@ -1,0 +1,4 @@
+---
+sagit:
+  src_dir: /home/soft/5.2.1/packed
+  dst_dir: /home/soft/5.2.1/unpacked

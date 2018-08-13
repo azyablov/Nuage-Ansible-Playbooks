@@ -1,0 +1,13 @@
+---
+- hosts: nsgvs
+  gather_facts: False
+  remote_user: root
+  become: no
+  serial:
+    - 1
+    - 1
+    - 50%
+
+  tasks:
+    - import_role:
+        name: nsgv-predeploy

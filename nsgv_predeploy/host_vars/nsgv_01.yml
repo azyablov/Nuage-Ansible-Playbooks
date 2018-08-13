@@ -1,0 +1,48 @@
+---
+target_server_type: kvm
+hostname: nsgv_01.int.nuage.cf
+vmname: nsgv_01
+
+
+target_server: 172.17.14.40
+
+nsgv_mac: '52:17:14:40:00:01'
+
+bootstrap_method: zfb_iso
+nsgv_qcow2_path: /home/soft/5.2.1/unpacked/vns/nsg
+nsgv_qcow2_file_name: ncpe_centos7.qcow2
+
+
+
+
+# From Group vars
+# Metro vars
+mgmt_bridge: nullman
+# Remains the same
+
+# Metro vars
+data_bridge: nulldata
+# New vars
+uplink1_bridge: nulldata
+# uplink2_addess: None
+
+
+# New vars
+# uplink2_bridge: nulldata2
+# uplink2_address: 10.88.44.1
+# uplink2_prefix: 24
+
+# Metro vars
+access_bridge: nullaccess1
+images_path: /home/vms
+ansible_deployment_host: 172.17.14.40
+
+# New var
+images_path_override: True
+
+# New vars, can be defined per NSG ot override
+bridge_config:
+  nm_controlled: no
+  stp: no
+  mtu: 9000
+

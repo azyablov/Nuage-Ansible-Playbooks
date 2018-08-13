@@ -1,0 +1,332 @@
+---
+- name: Autogenerate xmpp username if not defined
+  set_fact:
+    xmpp:
+      username: "{{ hostname|regex_replace('^([a-zA-Z0-9]+)\\..*', '\\1') }}"
+  register: xmpp_fact
+  when: xmpp.username is not defined
+
+
+- name: Set cli provider
+  set_fact:
+    cli:
+      host: "{{ bof.mgmt_ip }}"
+      username: "{{vsc.user|default('admin')}}"
+      password: "{{vsc.password|default('admin')}}"
+  when: vsc.user is defined and vsc.password is defined and hostname is defined
+
+- name: Send notification message via Slack that deploy playbook for {{hostname}} is started
+  slack:
+    token: "{{slack_tocken}}"
+    msg: "Start deploying"
+    channel: "#test"
+    username: "anton0zyablov@gmail.com"
+    #icon_url: http://www.example.com/some-image-file.png
+    link_names: yes
+    validate_certs: False
+    parse: none
+  delegate_to: localhost
+  register: start_slack
+
+- name: Send notification message via Slack that DEPLOY playbook for {{hostname}} is started via command + curl
+  command: "curl -X POST --data-urlencode 'payload={\"channel\": \"#test\", \"username\": \"ansible\", \"text\": \"Start executing DEPLOY role for {{hostname}}.\", \"icon_emoji\": \":ghost:\"}' {{slack_tocken|default('')}}"
+  delegate_to: localhost
+  when: slack_tocken is defined
+
+- name: Slack result
+  debug:
+    var: |
+      "{{start_slack}}"
+
+- name: Stop execution
+  fail:
+    msg: "break point"
+  when: True
+
+
+- name: Check that VSDs are available
+  wait_for:
+    port: 22
+    host: "{{ bof.mgmt_ip }}"
+    search_regex: OpenSSH
+    delay: 3
+  delegate_to: localhost
+  register: vsd_availability
+
+- name: Check that VSC is available from VSDs
+  wait_for:
+    port: 22
+    host: "{{ bof.mgmt_ip }}"
+    search_regex: OpenSSH
+    delay: 3
+  remote_user: "root"
+  delegate_to: "{{ item }}"
+  with_items: "{{ groups['vsds'] }}"
+  register: avail_vsc_from_vsds
+  when: vsd_availability|success
+
+- block:
+  - name: Clean known_hosts on localhost
+    known_hosts:
+      name: "{{ bof.mgmt_ip }}"
+      state: absent
+    delegate_to: localhost
+  
+  - name: Clean known_hosts on hypervisor
+    known_hosts:
+      name: "{{ bof.mgmt_ip }}"
+      state: absent
+    delegate_to: "{{ target_server }}"
+    remote_user: "{{ target_server_username }}"
+
+  - name: Change XMPP connection to TLS on VSD
+    command: /opt/vsd/bin/ejmode allow -y
+    remote_user: root
+    delegate_to: "{{ item }}"
+    with_items: "{{ groups['vsds'] }}"
+    register: xmpp_enable
+    changed_when:  not ( 'VSD Ejabberd is already set to allow mode' in xmpp_enable.stdout )
+
+# Does not work with 5.2.x VSD
+#  - name: wait for ejabberd-status to become running
+#    monit:
+#      name: "ejabberd-status"
+#      timeout: 5
+#      state: started
+#    remote_user: root
+#    delegate_to: "{{ item }}"
+#    with_items: "{{ groups['vsds'] }}"
+
+  - name: Check ejabberd-status
+    shell: "sleep 10 && monit status ejabberd-status | grep status"
+    remote_user: root
+    delegate_to: "{{ item }}"
+    with_items: "{{ groups['vsds'] }}"
+    register: ejabberd_status
+    changed_when: False
+    failed_when: not ( "'Status ok' in ejabberd_status.output" )
+
+# Does not work with 5.2.x VSD
+#  - name: wait for ejbca-status to become running
+#    monit:
+#      name: "ejbca-status"
+#      timeout: 5
+#      state: started
+#    remote_user: "root"
+#    delegate_to: "{{ item }}"
+#    with_items: "{{ groups['vsds'] }}"
+  
+  - name: Check ejbca-status
+    shell: "sleep 10 && monit status ejbca-status | grep status"
+    remote_user: root
+    delegate_to: "{{ item }}"
+    with_items: "{{ groups['vsds'] }}"
+    register: ejbca_status
+    changed_when: False
+    failed_when: not ( "'Status ok' in ejbca_status.output" )
+
+  when: vsd_availability|success
+
+
+- block:
+# OLD stuff that comes from METRO
+#  - name: Download pip installer
+#    command: curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+#    delegate_to: "{{ item }}"
+#    remote_user: "root"
+#    with_items: "{{ groups['vsds'] }}"
+  
+  - name: Download pip installer
+    get_url:
+      url: "https://bootstrap.pypa.io/get-pip.py"
+      validate_certs: no
+      dest: ~/get-pip.py
+    delegate_to: "{{ item }}"
+    remote_user: "root"
+    with_items: "{{ groups['vsds'] }}" 
+
+  - name: Execute pip installer
+    command: python ~/get-pip.py
+    delegate_to: "{{ item }}"
+    remote_user: "root"
+    with_items: "{{ groups['vsds'] }}"
+    register: install_pip
+    changed_when: "'Requirement already up-to-date' not in install_pip.stdout"
+
+  - name: Install pexpect on VSD
+    pip:
+      name: pexpect
+    delegate_to: "{{ item }}"
+    remote_user: "root"
+    with_items: "{{ groups['vsds'] }}"
+
+  when: yum_proxy == 'NONE' or yum_proxy is not defined and config_cert_and_tls == True
+
+- block:
+#  - name: Download pip installer
+#    command: curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+#    delegate_to: "{{ item }}"
+#    remote_user: "root"
+#      environment:
+#      http_proxy: "{{ yum_proxy }}"
+#      https_proxy: "{{ yum_proxy }}"
+#    with_items: "{{ groups['vsds'] }}"
+  
+  - name: Download pip installer
+    get_url:
+      url: "https://bootstrap.pypa.io/get-pip.py"
+      validate_certs: no
+      dest: ~/get-pip.py
+    delegate_to: "{{ item }}"
+    remote_user: "root"
+    environment:
+      http_proxy: "{{ yum_proxy }}"
+      https_proxy: "{{ yum_proxy }}"
+    with_items: "{{ groups['vsds'] }}" 
+
+  - name: Execute pip installer
+    command: python ~/get-pip.py
+    delegate_to: "{{ item }}"
+    remote_user: "root"
+    environment:
+      http_proxy: "{{ yum_proxy }}"
+      https_proxy: "{{ yum_proxy }}"
+    with_items: "{{ groups['vsds'] }}"
+    register: install_pip
+    changed_when: "'Requirement already up-to-date' not in install_pip.stdout"
+
+  - name: Install pexpect on VSD
+    pip:
+      name: pexpect
+    delegate_to: "{{ item }}"
+    remote_user: "root"
+    environment:
+      http_proxy: "{{ yum_proxy }}"
+      https_proxy: "{{ yum_proxy }}"
+    with_items: "{{ groups['vsds'] }}"
+
+  when: yum_proxy is not defined and yum_proxy != 'NONE' and config_cert_and_tls == True
+
+- block:    
+  - name: Check pip version for pexpect module
+    shell: "pip list --format=columns| grep pexpect  | grep '3\\.[3-9]'"
+    ignore_errors: True
+    delegate_to: "{{ groups['vsds'][0] }}"
+    remote_user: "root"
+    register: pip_version
+
+  - name: Create and transfer certs from VSD using command module
+    expect:
+     timeout: 55
+     command: "/opt/vsd/ejbca/deploy/certMgmt.sh -a generate -u {{xmpp.username}} -c {{xmpp.username}} -d {{hostname}} -f pem -t server -s {{vsc.user}}@{{bof.mgmt_ip}}:/ -o csp"
+     echo: yes
+     responses:
+       (?i)password: "{{vsc.password}}"
+    delegate_to: "{{ groups['vsds'][0] }}"
+    remote_user: "root"
+    register: vsd_cert_man_xmpp
+    when: xmpp.username is defined and pip_version|success
+
+  - name: Create and transfer certs from VSD using shell+expect
+    shell: |
+      set timeout 55
+      spawn /opt/vsd/ejbca/deploy/certMgmt.sh -a generate -u {{xmpp.username}} -c {{xmpp.username}} -d {{hostname}} -f pem -t server -s {{vsc.user}}@{{bof.mgmt_ip}}:/ -o csp
+      sleep 3
+      expect "password:"
+      send "{{ vsc.password }}\n"
+      sleep 10
+      exit 0
+    args:
+      executable: /usr/bin/expect
+    delegate_to: "{{ groups['vsds'][0] }}"
+    remote_user: "root"
+    when: xmpp.username is defined and pip_version|failed
+
+# SROS config block
+#    system
+#        security
+#            tls-profile "ex-tls-profile" create
+#                own-key "cf1:\vsc5-Key.pem"
+#                own-certificate "cf1:\vsc5.pem"
+#                ca-certificate "cf1:\vsc5-CA.pem"
+#                no shutdown
+#            exit
+#        exit
+#    exit
+#    vswitch-controller
+#        xmpp-server "vsc5@vsd.int.nuage.cf"
+#        open-flow
+#            tls-profile "ex-tls-profile"
+#        exit
+#        xmpp
+#            tls-profile "ex-tls-profile"
+#        exit
+#        ovsdb
+#            tls-profile "ex-tls-profile"
+#        exit
+#        no shut
+#        exit
+
+  - name: Update TLS profile with cert files names
+    sros_config:
+      backup: yes
+      provider: "{{ cli }}"
+      lines:
+        - configure system security tls-profile {{sros_config.tls_profile_name}} own-key cf1:\{{xmpp.username}}-Key.pem
+        - configure system security tls-profile {{sros_config.tls_profile_name}} own-certificate cf1:\{{xmpp.username}}.pem
+        - configure system security tls-profile {{sros_config.tls_profile_name}} ca-certificate cf1:\{{xmpp.username}}-CA.pem
+        - configure system security tls-profile {{sros_config.tls_profile_name}} no shutdown
+      save: yes
+    retries: 3
+    delay: 10
+    delegate_to: localhost
+    when: cli is defined and xmpp.username is defined
+    register: tls_profile_update
+
+  - name: Update vswitch-controller with TLS profile
+    sros_config:
+      backup: yes
+      provider: "{{ cli }}"
+      lines:
+        - configure vswitch-controller xmpp-server {{xmpp.username}}@{{vsd_fqdn}}
+        - configure vswitch-controller open-flow tls-profile {{sros_config.tls_profile_name}}
+        - configure vswitch-controller xmpp tls-profile {{sros_config.tls_profile_name}}
+        - configure vswitch-controller ovsdb tls-profile {{sros_config.tls_profile_name}}
+        - configure vswitch-controller no shutdown
+      save: yes
+    retries: 3
+    delay: 10
+    delegate_to: localhost
+    when: cli is defined and xmpp.username is defined and vsd_fqdn is defined
+    register:  config_vswitch_controller
+  
+  - name: check xmpp connectivity between VSC and VSD after enabling TLS
+    sros_command:
+      commands:
+        - show vswitch-controller xmpp-server | match Functional
+      provider: "{{ cli }}"
+      #match: any
+      #wait_for: xmpp_status.stdout[0] contains Functional
+      retries: 6
+      interval: 10
+    register: xmpp_status
+    delegate_to: localhost
+
+  - name: Assert XMPP status
+    assert:
+      that: "'Functional' in xmpp_status.stdout[0]"
+      msg: "XMPP status is not Functional"
+    delegate_to: localhost
+
+  - name: Print output of 'show vswitch-controller xmpp-server' when verbosity >= 1
+    debug: 
+      var: xmpp_status
+      verbosity: 2
+
+
+  - name: DEBUG
+    debug:
+      var: tls_profile_update
+      verbosity: 2
+
+  when: sros_config.config_cert_and_tls is defined

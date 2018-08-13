@@ -1,0 +1,26 @@
+NAME={{ item.item.bridge }}
+BOOTPROTO=none
+DEVICE={{ item.item.bridge }}
+TYPE=Bridge
+ONBOOT=yes
+IPV6INIT=no
+{% if bridge_config.stp is defined and bridge_config.stp == false %}
+STP=no
+{% endif %}
+{% if bridge_config.stp is defined and bridge_config.stp == true %}
+STP=yes
+{% endif %}
+{% if item.item.ipv4 != 'None' and item.item.prefix != 'None' %}
+IPADDR={{ item.item.ipv4 }}
+PREFIX={{ item.item.prefix }}
+{% endif %}
+{% if bridge_config.mtu is defined  %}
+MTU={{ bridge_config.mtu }}
+{% endif %}
+IPV4_FAILURE_FATAL=no
+{% if nm_controlled == false %}
+NM_CONTROLLED=no
+{% endif %}
+{% if nm_controlled == true %}
+NM_CONTROLLED=yes
+{% endif %}

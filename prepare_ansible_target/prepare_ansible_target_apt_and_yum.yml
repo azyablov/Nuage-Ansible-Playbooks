@@ -1,0 +1,120 @@
+---
+# Run with ansible-playbook <filename> -k
+#   (make sure to add the IPs of machines you want to manage to /etc/ansible/hosts first)
+
+- hosts: web-grp, sagit
+  gather_facts: False
+  remote_user: root
+  become: no
+  serial:
+    - 1
+    - 2
+    - 50%
+  max_fail_percentage: 10
+#  become_user: root
+#  become_method: sudo
+  vars:
+    my_ssh_user: root
+    workflow_fail: 0
+
+  tasks:
+    - block:
+      - name: Check for Python 2
+        raw: test -e /usr/bin/python
+        register: res_chkpy2
+        changed_when: res_chkpy2.rc != 0
+
+      - name: Show res_chkpy2
+        debug: var=res_chkpy2 verbosity=3
+
+      - name: Install Python 2
+        raw: (apt-get update && apt-get install -y python)
+        register: res_instpy2
+        when: res_chkpy2.rc != 0
+        changed_when: "'0 upgraded, 0 newly installed' not in res_instpy2.stdout"
+
+      - name: Show res_instpy2
+        debug: var=res_instpy2 verbosity=3
+                  
+      rescue:
+        - name: Py2 installation failed
+          debug:
+            msg: Something goes wrong with Py2 installation. Enable vebosity level 3 to debug.
+        - set_fact:
+            workflow_fail: 1
+            cacheable: yes
+      
+      always:
+        - name: Verify does our workflow fail or not
+          debug:
+            msg: workflow_fail = {{ workflow_fail }}
+            verbosity: 3
+          when: workflow_fail == 1
+      when: "package_manager == 'apt'"
+    
+    - block:
+      - name: Check for Python 2
+        raw: test -e /usr/bin/python
+        register: res_chkpy2
+        changed_when: res_chkpy2.rc != 0
+
+      - name: Show res_chkpy2
+        debug: var=res_chkpy2 verbosity=3
+
+      - name: Install Python 2
+        raw: yum install -y epel-release && yum repolist && yum install -y python2 python2-simplejson
+        register: res_instpy2
+        when: res_chkpy2.rc != 0
+        changed_when: "'0 upgraded, 0 newly installed' not in res_instpy2.stdout"
+
+      - name: Show res_instpy2
+        debug: var=res_instpy2 verbosity=3
+                  
+      rescue:
+        - name: Py2 installation failed
+          debug:
+            msg: Something goes wrong with Py2 installation. Enable vebosity level 3 to debug.
+        - set_fact:
+            workflow_fail: 1
+            cacheable: yes
+      
+      always:
+        - name: Verify does our workflow fail or not
+          debug:
+            msg: workflow_fail = {{ workflow_fail }}
+            verbosity: 3
+          when: workflow_fail == 1
+      when: "package_manager == 'yum'"
+  
+    - name: SSH keys installation
+      debug: "msg='Count py2 is installed. Now installing local SSH keys.'"
+      when: workflow_fail == 0
+
+    - name: Updating ssh keys using authorized_keys module
+      authorized_key:
+        user: root
+        exclusive: no
+        key: "{{ lookup('file', '/home/azyablov/.ssh/id_rsa.pub') }}"
+      when: workflow_fail == 0
+      register: res_auth_keys_update
+    
+    - name: Show res_auth_keys_update
+      debug: 
+        var: res_auth_keys_update 
+        verbosity: 2
+
+# In case authorized_key module does not work properly
+    - name: Create /root/.ssh
+      file: path=/root/.ssh state=directory mode=0700
+      when: res_auth_keys_update.failed == "true"
+
+    - name: Touch authorize_keys file in case not exists
+      file:
+        path: /root/.ssh/authorized_key
+        state: touch
+      when: res_auth_keys_update.failed == "true"
+
+    - name: Create /root/.ssh/authorized_keys from our local ssh pubkey
+      lineinfile: dest=/root/.ssh/authorized_keys line="{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+      when: res_auth_keys_update.failed == "true"
+

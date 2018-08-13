@@ -1,0 +1,91 @@
+exit all
+configure
+
+#--------------------------------------------------
+echo "System Configuration"
+#--------------------------------------------------
+    system
+        name {{ hostname }}
+        time
+            ntp
+{% for ntp_server in ntp_server_list %}
+                server {{ ntp_server }}
+{% endfor %}
+                no shutdown
+            exit
+        exit
+    exit
+#--------------------------------------------------
+#echo "System Security Configuration"
+#--------------------------------------------------
+    system
+        security
+            tls-profile "{{ sros_config.tls_profile_name }}" create
+                shutdown
+            exit
+        exit
+    exit
+#--------------------------------------------------
+echo "Virtual Switch Controller Configuration"
+#--------------------------------------------------
+    vswitch-controller
+        shutdown
+    exit
+
+#--------------------------------------------------
+echo "Router (Network Side) Configuration"
+#--------------------------------------------------
+    router
+{% for interface in sros_config.router_interfaces %}
+{% if interface.name is defined and interface.address is defined %}
+        interface "{{ interface.name }}"
+            address {{ interface.address }}
+            no shutdown
+        exit
+{% endif %}
+{% endfor %}
+{% if sros_config.autonomous_system %}
+        autonomous-system {{ sros_config.autonomous_system }}
+{% endif %}
+{% if system_ip is defined %}
+        router-id {{ system_ip }}
+{% endif %}
+#--------------------------------------------------
+##echo "Static Route Configuration"
+###--------------------------------------------------
+{% if sros_config.static_routes is defined %}
+{% for route in sros_config.static_routes %}
+{% if route.next_hop is defined and route.prefix is defined %}
+        static-route {{ route.prefix }} next-hop {{ route.next_hop }}
+{% endif %}
+{% endfor %}
+{% endif %}
+#--------------------------------------------------
+##echo "BGP Configuration"
+###--------------------------------------------------
+        bgp
+            connect-retry 2
+            min-route-advertisement 1
+            outbound-route-filtering
+                extended-community
+                    send-orf
+                exit
+            exit
+{% if sros_config.bgp.group is defined %}
+{% for bgp_group in sros_config.bgp.group %}
+            group "{{ bgp_group.name }}"
+                family evpn
+                type internal
+{% for bgp_nei in bgp_group.neighbors %}
+{% if bgp_nei is defined %}
+                neighbor {{ bgp_nei }}
+                exit
+{% endif %}
+{% endfor %}
+            exit
+{% endfor %}
+{% endif %}
+        exit
+    exit
+exit
+exit all

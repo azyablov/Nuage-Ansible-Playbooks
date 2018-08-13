@@ -1,0 +1,32 @@
+---
+- hosts: sagit
+  gather_facts: False
+  become: False
+  remote_user: root
+
+  tasks:
+    - name: Getting list of files for directory
+      command: 'ls {{ sagit.src_dir }}'
+      register: lsdf
+    
+    - debug:
+        var: lsdf
+    
+    - name: Check this is regular file
+      command: "test -f {{ sagit.src_dir }}/{{ item }}"
+      with_items: "{{ lsdf.stdout_lines }}"
+      failed_when: False
+      register: chkrf
+
+    - name: Debug | Check list of files to copy
+      debug: '{{ sagit.src_dir }}/{{ item.item }}' verbosity=3
+      with_items: "{{ chkrf.results }}"
+      when: 'item.rc == 0'
+
+    - name: Copy regular files softare repo directory
+      fetch:
+        dest: "{{ sagit.dst_dir }}/"
+        src: "{{ sagit.src_dir }}/{{ item.item }}"
+        flat: yes
+      with_items: "{{ chkrf.results }}"
+      when: 'item.rc  == 0'

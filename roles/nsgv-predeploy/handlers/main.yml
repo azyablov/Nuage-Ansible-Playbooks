@@ -1,0 +1,14 @@
+---
+- name: ifup handler
+  command: "ifup {{ item.item.bridge }}"
+  when: item.ansible_facts is defined
+  with_items: "{{ bridge_availability.results }}"
+  listen: new_bridge_created
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"
+
+- name: Restart libvirt service
+  service: name={{ libvirt.service_name }} state=restarted
+  listen: new_bridge_created
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"

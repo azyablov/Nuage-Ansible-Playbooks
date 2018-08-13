@@ -1,0 +1,6 @@
+---
+nginx:
+  server_root: /etc/nginx
+  servers:
+    - { name: Server1 , listen: 8081 }
+    - { name: Server2 , listen: 8082 }

@@ -1,0 +1,116 @@
+---
+- name: Check manadatory variables are defined
+  fail:
+    msg: One or many mandatory variables are not defined
+  when: not ( check_dns is defined and check_ping is defined )
+
+- block:
+  - name: Try to resolve VSC hostname from localhost
+    shell: "dig {{ hostname | quote }} +noall +short"
+    ignore_errors: yes
+    register: dig_loc_res
+    delegate_to: localhost
+    failed_when: dig_loc_res.stdout == ""
+    changed_when: False
+    
+  - name: Try to resolve VSC hostname from hypervisor
+    shell: "dig {{ hostname | quote }} +noall +short 2"
+    ignore_errors: yes
+    register: dig_hyp_res
+    delegate_to: "{{ target_server }}"
+    remote_user: "{{ target_server_username }}"
+    when: dig_loc_res | failed
+    failed_when: dig_hyp_res.stdout == ""
+    changed_when: False
+  
+  - name: Fail if can't resolve DNS
+    fail:
+      msg: "Unable to resolve {{ hostname }} locally and on hypervisor {{ target_server }}"
+    when: dig_hyp_res | failed
+  
+  - name: Fail if IP@ set for {{ hostname }} does not match resolved one
+    fail:
+      msg: "IP@ {{ bof.mgmt_ip }} proposed for MGMT inf config does match resolved entry record locally {{ dig_loc_res.stdout | default('None') }} or on hyprevisor {{ dig_hyp_res.stdout | default('None') }}"
+    when: ( dig_hyp_res | skipped and bof.mgmt_ip != dig_loc_res.stdout ) or ( dig_hyp_res | success and bof.mgmt_ip != dig_hyp_res.stdout )
+
+  when: check_dns == True
+
+- block:
+  - name: Try to ping VSC {{ hostname }} from localhost
+    command: ping -c 2 -t 1 {{ hostname }}
+    register: ping_loc_res_dns
+    delegate_to: localhost
+    changed_when: False
+    when:
+      - check_dns == True
+      - dig_loc_res|success
+    failed_when: ping_loc_res_dns.rc == 0
+  
+  - name: DEBUG | Try to ping VSC {{ hostname }} from localhost results
+    debug:
+      var: ping_loc_res_dns
+      verbosity: 3
+
+  - name: Try to ping VSC {{ bof.mgmt_ip }} from localhost
+    command: ping -c 2 -t 1 {{ bof.mgmt_ip }}
+    register: ping_loc_res_ip
+    delegate_to: localhost
+    changed_when: False
+    when: check_dns != True or ping_loc_res_dns|skipped
+    failed_when: ping_loc_res_ip.rc == 0
+
+  - name: DEBUG | Try to ping VSC {{ bof.mgmt_ip }} from localhost
+    debug:
+      var: ping_loc_res_ip
+      verbosity: 3
+  
+  - name: Try to ping VSC {{ hostname }} from hypervisor
+    command: ping -c 2 -t 1 {{ hostname }}
+    register: ping_hyp_res_dns
+    delegate_to: "{{ target_server }}"
+    remote_user: "{{ target_server_username }}"
+    changed_when: False
+    when:
+      - check_dns != True
+      - dig_hyp_res|success
+    failed_when: ping_hyp_res_dns.rc == 0
+
+  - name: DEBUG | Try to ping VSC {{ hostname }} from hypervisor
+    debug:
+      var: ping_hyp_res_dns
+      verbosity: 3
+  
+  - name: Try to ping VSC {{ bof.mgmt_ip }} from hypervisor
+    shell: ping -c 2 -t 1 {{ bof.mgmt_ip }}
+    register: ping_hyp_res_ip
+    delegate_to: "{{ target_server }}"
+    remote_user: "{{ target_server_username }}"
+    changed_when: False
+    when: check_dns != True or ping_hyp_res_dns|skipped
+    failed_when: ping_hyp_res_ip.rc == 0
+
+  - name: DEBUG | Try to ping VSC {{ bof.mgmt_ip }} from hypervisor
+    debug:
+      var: ping_hyp_res_ip
+      verbosity: 3
+  
+  when: check_ping == True
+
+- import_tasks: kvm.yml
+  when: target_server_type | match("kvm")
+  tags:
+    - vsc
+    - vsc-predeploy
+
+- import_tasks: heat.yml
+  when: target_server_type | match("heat")
+  tags:
+    - vsc
+    - heat
+    - vsc-predeploy
+
+- import_tasks: vcenter.yml
+  when: target_server_type | match("vcenter")
+  tags:
+    - vsc
+    - vsc-predeploy

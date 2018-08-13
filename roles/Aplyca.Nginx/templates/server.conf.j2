@@ -1,0 +1,16 @@
+server {
+
+    listen {{ item.listen }};
+
+
+    server_name  {{ item.name }};
+
+    client_max_body_size 20m;
+
+    index index.php index.html index.htm;
+    root   /var/www/{{ item.name }};
+
+ {# {% for directive, value in item.directives|dictsort(true) #}
+ {#   {{ directive }} {{ value }}; #}
+ {# {% endfor %} #}
+}

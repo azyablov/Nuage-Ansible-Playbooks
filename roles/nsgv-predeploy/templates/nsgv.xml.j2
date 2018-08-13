@@ -1,0 +1,117 @@
+<domain type='kvm'>
+  <name>{{ vmname }}</name>
+  <memory>{{ nsgv_ram }}</memory>
+  <currentMemory>{{ nsgv_ram }}</currentMemory>
+  <cpu/>
+  <os>
+    <type arch='x86_64' machine='pc'>hvm</type>
+    <smbios mode='sysinfo'/>
+    <boot dev='hd'/>
+  </os>
+  <sysinfo type='smbios'>
+    <system>
+      <entry name='product'>ovs-ncpe</entry>
+    </system>
+  </sysinfo>
+  <features>
+    <apic/>
+    <acpi/>
+  </features>
+  <cpu>
+    <topology sockets='1' cores='1' threads='1'/>
+  </cpu>
+  <clock offset='utc'>
+    <timer name='pit' tickpolicy='delay'/>
+    <timer name='rtc' tickpolicy='delay'/>
+  </clock>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>coredump-destroy</on_crash>
+  <devices>
+    <emulator>{{ libvirt.emulator }}</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='{{ images_path }}/{{ vmname }}/{{ nsgv_qcow2_file_name }}'/>
+      <target dev='hda' bus='ide'/>
+      <alias name='ide0-0-0'/>
+      <address type='drive' controller='0' bus='0' target='0' unit='0'/>
+    </disk>
+{% if bootstrap_method == 'zfb_iso'%}
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+{% if bootstrap_method == 'zfb_iso' %}
+      <source file='{{ images_path }}/{{ vmname }}/user-image.iso'/>
+{% endif %}
+      <backingStore/>
+      <target dev='hdb' bus='ide'/>
+      <readonly/>
+      <alias name='ide0-0-1'/>
+      <address type='drive' controller='0' bus='0' target='0' unit='1'/>
+    </disk>
+{% endif %}
+    <controller type='usb' index='0'>
+      <alias name='usb0'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x2'/>
+    </controller>
+{% set mac_base = nsgv_mac[-2:] | trim() | int(16) %}
+{# Below we have the port template for NSG with two uplinks with/without access_bridge defined #}
+{% if uplink1_bridge is defined and uplink2_bridge is defined %}
+    <interface type='bridge'>
+      <source bridge='{{ uplink1_bridge }}'/>
+{% if nsgv_mac is defined %}
+      <mac address='{{ nsgv_mac }}'/>
+{% endif %}
+      <target dev='{{ vmname }}_vnet0'/>
+      <model type='virtio'/>
+    </interface>
+    <interface type='bridge'>
+      <source bridge='{{ uplink2_bridge }}'/>
+{% if nsgv_mac is defined %}
+      <mac address='{{ nsgv_mac | trim() | truncate(15, True, '') }}{{ "%02x" | format (mac_base + 1) }}'/>
+{% endif %}
+      <target dev='{{ vmname }}_vnet1'/>
+      <model type='virtio'/>
+    </interface>
+{% if access_bridge is defined %}
+  {% for inf in [2, 3, 4, 5, 6] %}
+    <interface type='bridge'>
+      <source bridge='{{ access_bridge }}'/>
+      <mac address='{{ nsgv_mac | trim() | truncate(15, True, '') }}{{ "%02x" | format (mac_base + inf) }}'/>
+      <target dev='{{ vmname }}_vnet{{ inf }}'/>
+      <model type='virtio'/>
+    </interface>
+  {% endfor %}
+{% endif %}
+{# Below we have the port template for NSG with one uplink with/without access_bridge defined #}
+{% endif %}
+{% if uplink1_bridge is defined and not uplink2_bridge is defined %}
+    <interface type='bridge'>
+      <source bridge='{{ uplink1_bridge }}'/>
+{% if nsgv_mac is defined %}
+      <mac address='{{ nsgv_mac }}'/>
+{% endif %}
+      <target dev='{{ vmname }}_vnet0'/>
+      <model type='virtio'/>
+    </interface>
+{% if access_bridge is defined %}
+  {% for inf in [1, 2, 3, 4, 5] %}
+    <interface type='bridge'>
+      <source bridge='{{ access_bridge }}'/>
+      <mac address='{{ nsgv_mac | trim() | truncate(15, True, '') }}{{ "%02x" | format (mac_base + inf) }}'/>
+      <target dev='{{ vmname }}_vnet{{ inf }}'/>
+      <model type='virtio'/>
+    </interface>
+  {% endfor %}
+{% endif %}
+{% endif %}
+    <console type='pty' tty='/dev/pts/16'>
+      <source path='/dev/pts/16'/>
+      <target type='serial' port='0'/>
+      <alias name='serial0'/>
+    </console>
+    <memballoon model='virtio'>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x06' function='0x0'/>
+    </memballoon>
+  </devices>
+  <seclabel type='none'/>
+</domain>

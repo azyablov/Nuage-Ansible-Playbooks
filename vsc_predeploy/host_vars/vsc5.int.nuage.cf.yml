@@ -1,0 +1,89 @@
+---
+# Metro vars
+target_server_type: kvm
+hostname: vsc5.int.nuage.cf
+target_server: 172.17.14.40
+# New vars
+check_dns: True
+check_ping: True
+# ========
+
+
+# Group vars override
+mgmt_bridge: nullman
+data_bridge: nulldata4
+
+# Metro vars
+vmname: vsc5_nullab
+
+# Metro vars
+images_path: /home/vms
+vsc_qcow2_path: /home/soft/5.2.1/unpacked/vsc/single_disk
+vsc_qcow2_file_name: vsc_singledisk.qcow2
+
+vsd_fqdn: vsd.int.nuage.cf
+system_ip: 1.1.1.6
+
+# depricated metro var to delete ???
+xmpp:
+  username: vsc5
+
+
+vsc_user: admin
+vsc_password: admin
+
+# New var
+images_path_override: True
+
+control_ip: 10.88.51.12
+control_netmask_prefix: 24
+# New var
+control_gw: 10.88.51.1
+
+
+ntp_server_list:
+  - 10.88.33.1
+
+bof:
+  # Flat Metro vars 
+  vsc_mgmt_static_route_list:
+    - 0.0.0.0/1
+    - 128.0.0.1/1
+  # Metro vars
+  mgmt_ip: 10.88.33.12
+  mgmt_netmask_prefix: 24
+  mgmt_gateway: 10.88.33.1
+  dns_server_list:
+    - 10.88.33.1
+    - 8.8.8.8
+
+
+# config.cfg vars
+
+
+
+
+
+
+sros_config:
+  tls_profile_name: ex-tls-profile
+
+  router_interfaces:
+    - { name: system, address: 1.1.1.6/32 }
+    - { name: control, address: 10.88.51.12/24 }
+
+  autonomous_system: 65000
+
+  router_id: 1.1.1.6
+  
+  static_routes:
+  #  - { prefix: 10.88.45.0/24, next_hop: 10.88.44.1 }
+    - { prefix: 0.0.0.0/0, next_hop: 10.88.51.1 }
+
+  bgp:
+    group:
+      - { name: internal,
+          neighbors: [] }
+
+    
+    

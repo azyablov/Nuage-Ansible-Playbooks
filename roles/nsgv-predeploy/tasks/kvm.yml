@@ -1,0 +1,255 @@
+---
+- name: Getting {{ target_server }} facts
+  setup:
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"
+
+- name: Check target for supported OS
+  fail: msg="Unsupported OS family ({{ ansible_os_family }})"
+  when: ansible_os_family not in nsgv_target_server_os_family_list
+
+- name: Check target memory
+  fail:
+    msg: "Not enough memory ({{ ansible_memtotal_mb }})"
+  when: ansible_memtotal_mb < nsgv_target_server_memory_mb_min
+
+- name: Check target cores
+  fail:
+    msg: "Not enough cores ({{ ansible_processor_vcpus }})"
+  when: ansible_processor_vcpus < nsgv_target_server_vcpus_min
+
+- name: Load OS family variables
+  include_vars:
+    file: "{{ item }}"
+  with_first_found: 
+    - "{{ ansible_distribution  }}.yml"
+    - "{{ ansible_os_family }}.yml"
+  register: os_fam_vars
+
+- debug:
+    var: os_fam_vars.ansible_facts
+    verbosity: 3
+
+- debug:
+    var: ansible_interfaces
+
+- name: Check manadatory variables are defined
+  fail:
+    msg: One or many mandatory variables are not defined
+  when: not ((uplink1_bridge is defined or data_bridge is defined) and vmname is defined and (uplink2_bridge is defined or access_bridge is defined))
+
+- name: Check whether if uplink1_bridge variable is defined and set data_bridge
+  set_fact: 
+    data_bridge: "{{ uplink1_bridge }}"
+  when: uplink1_bridge is defined
+  register: up1br_def
+
+- name: Set uplink1_bridge if not defined by data_bridge value
+  set_fact: 
+    uplink1_bridge: "{{ data_bridge }}"
+  when: up1br_def | skipped and data_bridge is defined
+
+- name: Data bridge names 
+  debug:
+    var: |
+      "UPLINK BRIDGES: uplink1: {{ uplink1_bridge }} / {{ data_bridge }} , uplink2: {{ uplink2_bridge | default ('None') }}"
+      "ACCESS BRDIGES: {{ access_bridge | default ('None') }}"
+    verbosity: 1
+
+- name: Check that mandatory bridges are defined [if not we will fail]
+  fail:
+    msg: "Mandatory bridges are not defined! Please define uplink1_bridge and access_bridge."
+  when: not ((data_bridge is defined or uplink1_bridge is defined) and vmname is defined)
+  ignore_errors: False
+
+- name: Check bridge availability on hypervisor
+  when: item.bridge not in ansible_interfaces and item.bridge != 'None'
+  set_fact:
+    nsgv_{{ item.fact }}: True
+  with_items:
+    - { fact: 'up1br' , bridge: "{{ uplink1_bridge }}", ipv4: "{{ uplink1_address | default ('None') }}", prefix: "{{ uplink1_prefix | default ('None') }}"}
+    - { fact: 'up2br' , bridge: "{{ uplink2_bridge | default ('None') }}", ipv4: "{{ uplink2_address | default ('None') }}", prefix: "{{ uplink2_prefix | default ('None') }}" }
+    - { fact: 'accbr' , bridge: "{{ access_bridge | default ('None') }}", ipv4: "{{ access_address | default ('None') }}", prefix: "{{ access_prefix | default ('None') }}" }
+  register: bridge_availability
+
+- debug:
+    var: bridge_availability
+    verbosity: 1
+
+- name: Check IP@ that assigned on the bridges is not used already on hypervisor
+  fail:
+    msg: "Bridge {{ item.item.bridge }} should be provisioned but IP@ {{ item.item.ipv4 }} to be assigned is used already!"
+  when: item.ansible_facts is defined and item.item.ipv4 != 'None' and item.item.prefix != 'None' and item.item.ipv4 in ansible_all_ipv4_addresses
+  with_items: '{{ bridge_availability.results }}'
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"
+
+- name: Install needed network manager libs for nmcli
+  yum:
+    name: '{{ item }}'
+    state: installed
+  with_items:
+    - NetworkManager-glib
+    - libnm-gtk-devel.x86_64
+    - nm-connection-editor.x86_64
+    - libsemanage-python
+    - policycoreutils-python
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"
+  when: bridge_availability | success and ansible_os_family | search('RedHat')
+
+- block:
+  - name: Bridges creation using nmcli module
+    # Example of nmcli: nmcli connection add type bridge con-name nulldata2 save yes autoconnect yes  \
+    # ipv4.method manual ipv4.addresses '10.88.44.1/24' connection.interface-name nulldata2  stp False connection.id nulldata2
+    nmcli:
+      autoconnect: yes
+      conn_name: "{{ item.item.bridge }}"
+      ifname: "{{ item.item.bridge }}"
+      state: present
+      stp: "{{ bridge_config.stp }}"
+      type: bridge
+      ip4: "{{ item.item.ipv4 }}/{{ item.item.prefix }}"
+    #Can be used for debug purposes
+    #debug:
+    #  msg: "{{ item.item.bridge }} should be created"
+    ignore_errors: True
+    when: "item.ansible_facts is defined and item.item.ipv4 != 'None' and item.item.prefix != 'None'"
+    with_items: '{{ bridge_availability.results }}'
+    register: nm_bridge_creation
+    #loop_conrol:
+    #  loop_var: bridge_status
+  - debug:
+      var: nm_bridge_creation
+      verbosity: 3
+    when: nm_bridge_creation | failed
+
+  - name: Bridges creation using nmcli tool
+    # Example of nmcli: nmcli connection add type bridge con-name nulldata2 save yes autoconnect yes  \
+    # ipv4.method manual ipv4.addresses '10.88.44.1/24' connection.interface-name nulldata2  stp False connection.id nulldata2
+    command: >
+      nmcli connection add type bridge con-name "{{ item.item.bridge }}" save yes
+      autoconnect yes {% if item.item.ipv4 != 'None' and item.item.prefix != 'None' %} ipv4.method manual ipv4.addresses "{{ item.item.ipv4 }}/{{ item.item.prefix }}" {% endif %}
+      connection.interface-name "{{ item.item.bridge }}" stp "{{ bridge_config.stp }}"
+      connection.id "{{ item.item.bridge }}"
+    #Can be used for debug purposes
+    #debug:
+    #  msg: "{{ item.item.bridge }} should be created"
+    when: 'item.ansible_facts is defined and nm_bridge_creation.failed == True'
+    with_items: '{{ bridge_availability.results }}'
+    register: cmd_bridge_creation
+    failed_when: "'successfully added' not in cmd_bridge_creation.stdout"
+    changed_when: "'successfully added' in cmd_bridge_creation.stdout"
+  
+  - debug:
+      var: cmd_bridge_creation
+    when: cmd_bridge_creation | failed
+
+  when: bridge_config.nm_controlled == True
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"
+
+
+- block:
+
+  - name: Create sysconfig script for bridges
+    template:
+      src: ifcfg-br.j2
+      dest: "/etc/sysconfig/network-scripts/ifcfg-{{ item.item.bridge }}"
+      owner: root
+      group: root
+      mode: '0644'
+      backup: yes
+      force: yes
+    when: item.ansible_facts is defined
+    with_items: '{{ bridge_availability.results }}'
+    register: bridge_sysconfig_creation
+    notify: new_bridge_created
+  
+  - meta: flush_handlers
+
+  when: bridge_config.nm_controlled == False
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"
+
+- name: Install packages for RedHat OS family distros needed for NSG instantiation
+  yum: 
+    name: "{{ item }}"
+    state: present
+  with_items:
+   - qemu-kvm
+   - libvirt
+   - bridge-utils
+   - libguestfs-tools
+   - libvirt-python
+  when: ansible_os_family | search('RedHat')
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"
+
+- name: Get a list of VMs from hypervisor
+  virt:
+    command: list_vms
+  register: hv_virt
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"
+
+- name: Check that NSG VM {{ vmname }} is not running already, if yes we will skip all next steps
+  assert:
+    that: vmname not in hv_virt.list_vms
+    msg: "{{ vmname }} is already running on {{ target_server }}"
+  ignore_errors: True
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"
+  register: chk_vm_exists
+
+- name: Check if {{ images_path }} contain VM files already and stop if images_path_override is True, value is {{ images_path_override }}
+  command: "test -e {{ images_path }}/{{ vmname }}/{{ nsgv_qcow2_file_name }}"
+  ignore_errors: False
+  register: chk_vm_image_exists
+  failed_when: chk_vm_image_exists.rc == 0
+  when: images_path_override == False
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"
+
+- block:
+  - name: Create libvirt image directory for VM {{ vmname }}
+    file:
+      path: "{{ images_path }}/{{ vmname }}"
+      state: directory
+      owner: "{{ libvirt.user }}"
+      group: "{{ libvirt.group }}"
+      mode: "2755"
+
+  - name: Copy the NSG qcow image to virt images directory of {{ images_path }}/{{ vmname }}
+    copy:
+      src: "{{ nsgv_qcow2_path }}/{{ nsgv_qcow2_file_name }}"
+      dest: "{{ images_path }}/{{ vmname }}"
+      owner: "{{ libvirt.user }}"
+      # We should set group explicitly other wise it will be root
+      group: "{{ libvirt.group }}"
+      mode: "0664"
+
+  - name: Define new NSG VM {{ vmname }}
+    ignore_errors: False
+    virt:
+      name: "{{ vmname }}"
+      command: define
+      xml: "{{ lookup('template', 'nsgv.xml.j2') }}"
+      uri: qemu:///system
+
+  - name: Run NSG VM {{ vmname }}
+    ignore_errors: True
+    virt:
+      name: "{{ vmname }}"
+      state: running
+      uri: qemu:///system
+
+  # Test tasks - to be deleted after debuig completed
+  - debug:
+      var: nsgv_target_server_os_family_list
+      verbosity: 1
+
+  when: chk_vm_exists | success
+  delegate_to: "{{ target_server }}"
+  remote_user: "{{ target_server_username }}"
+  ignore_errors: False

@@ -1,0 +1,6 @@
+libvirt:
+  emulator: "/usr/libexec/qemu-kvm"
+  user: "qemu"
+  group: "qemu"
+  # New variable 
+  service_name: "libvirtd"

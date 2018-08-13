@@ -1,0 +1,86 @@
+exit all
+configure
+
+#--------------------------------------------------
+echo "System Configuration"
+#--------------------------------------------------
+    system
+        name {{ system_name }}
+        time
+            ntp
+            {% for ntp_server in ntp_server_list %}
+                server {{ ntp_server }}
+            {% endfor %}
+                no shutdown
+            exit
+        exit
+    exit
+#--------------------------------------------------
+#echo "System Security Configuration"
+#--------------------------------------------------
+    system
+        security
+            tls-profile "{{ security_tls-profile }}" create
+                shutdown
+            exit
+        exit
+    exit
+#--------------------------------------------------
+echo "Virtual Switch Controller Configuration"
+#--------------------------------------------------
+    vswitch-controller
+        shutdown
+        xmpp-server "{{ hostname|regex_replace('^([a-zA-Z0-9])\\.(.*)$', '\\1')) }}@{{ vsd_fqdn }}"
+    exit
+
+#--------------------------------------------------
+echo "Router (Network Side) Configuration"
+#--------------------------------------------------
+    router
+        {% for interface in router_interfaces %}
+            {% if interface.name is defined and interface.address is defined %}
+        interface "interface.name"
+            address interface.address
+            no shutdown
+        exit
+            {% endif %}
+        {% endfor %}
+        {% if autonomous-system %}
+        autonomous-system {{ autonomous-system }}
+        {% endif %}
+        {% if system_ip is defined %}
+        router-id {{ system_ip }}
+        {% endif %}
+#--------------------------------------------------
+##echo "Static Route Configuration"
+###--------------------------------------------------
+        {% for route in static-routes %}
+            {% if route.prefix is defined and route.next-hop is defined %}
+        static-route {{ route.prefix }} next-hop {{ route.next-hop }}
+            {% endif %}
+        {% endfor %}
+#--------------------------------------------------
+##echo "BGP Configuration"
+###--------------------------------------------------
+        bgp
+            connect-retry 2
+            min-route-advertisement 1
+            outbound-route-filtering
+                extended-community
+                    send-orf
+                exit
+            exit
+            group "{{ bgp_group_name }}"
+                family evpn
+                type internal
+                {% for bgp_nei in bgp_group_neighbors %}
+                    {% if bgp_nei is defined %}
+                neighbor {{ bgp_nei }}
+                exit
+                    {% endif %}
+                {% endfor %}
+            exit
+        exit
+    exit
+exit
+exit all
