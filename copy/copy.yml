@@ -22,7 +22,7 @@
         var: chkrf
 
     - name: Debug | Check list of files to copy
-      debug: '{{ virgo.src_dir }}/{{ item.item }}'
+      debug: "{{ virgo.src_dir }}/{{ item.item }}"
         verbosity: 3
       with_items: "{{ chkrf.results }}"
       when: 'item.rc == 0'
