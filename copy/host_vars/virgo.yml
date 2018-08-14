@@ -1,4 +1,5 @@
 ---
 virgo:
-  src_dir: /var/nuage/
+  src_dir: /var/nuage
+  dst_dir: /home/soft
 ...
