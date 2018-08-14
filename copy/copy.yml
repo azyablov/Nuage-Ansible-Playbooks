@@ -28,7 +28,7 @@
 
     - name: Copy regular files softare repo directory
       fetch:
-        dest: "{{ sagit.dst_dir }}/"
+        dest: "{{ virgo.dst_dir }}/"
         src: "{{ virgo.src_dir }}/{{ item.item }}"
         flat: yes
       with_items: "{{ chkrf.results }}"
