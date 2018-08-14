@@ -1,12 +1,12 @@
 ---
 target_server_type: kvm
-hostname: nsgv_01a.nuage.cf
-vmname: nsgv_01a
+hostname: nsgv_02a.nuage.cf
+vmname: nsgv_02a
 
 
 target_server: 172.17.14.40
 
-nsgv_mac: '52:17:14:40:1a:01'
+nsgv_mac: '52:17:14:40:2a:01'
 
 bootstrap_method: zfb_iso
 nsgv_qcow2_path: /home/soft/5.2.3/unzip/vns/nsg
@@ -21,9 +21,9 @@ mgmt_bridge: virbr-mgmt
 # Remains the same
 
 # Metro vars
-data_bridge: virbr-underlay1
+data_bridge: virbr-underlay2
 # New vars
-uplink1_bridge: virbr-underlay1
+uplink1_bridge: virbr-underlay2
 # uplink2_addess: None
 
 
@@ -33,7 +33,7 @@ uplink1_bridge: virbr-underlay1
 # uplink2_prefix: 24
 
 # Metro vars
-access_bridge: nullaccess1
+access_bridge: nullaccess2
 images_path: /home/vms
 ansible_deployment_host: 172.17.14.40
 
