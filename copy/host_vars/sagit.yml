@@ -1,6 +1,4 @@
 ---
 sagit:
   dst_dir: /home/soft/
-
-virgo:
-  src_dir: /var/nuage/
+...

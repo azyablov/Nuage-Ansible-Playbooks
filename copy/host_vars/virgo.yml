@@ -1,0 +1,4 @@
+---
+virgo:
+  src_dir: /var/nuage/
+...
