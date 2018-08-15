@@ -136,23 +136,23 @@
 #    remote_user: "root"
 #    with_items: "{{ groups['vsds'] }}"
   
-#  - name: Download pip installer
-#    get_url:
-#      url: "https://bootstrap.pypa.io/get-pip.py"
-#      validate_certs: no
-#      dest: ~/get-pip.py
-#    delegate_to: "{{ item }}"
-#    remote_user: "root"
-#    with_items: "{{ groups['vsds'] }}" 
-#
-#  - name: Execute pip installer
-#    command: python ~/get-pip.py
-#    delegate_to: "{{ item }}"
-#    remote_user: "root"
-#    with_items: "{{ groups['vsds'] }}"
-#    register: install_pip
-#    changed_when: "'Requirement already up-to-date' not in install_pip.stdout"
-#
+  - name: Download pip installer
+    get_url:
+      url: "https://bootstrap.pypa.io/get-pip.py"
+      validate_certs: no
+      dest: ~/get-pip.py
+    delegate_to: "{{ item }}"
+    remote_user: "root"
+    with_items: "{{ groups['vsds'] }}" 
+
+  - name: Execute pip installer
+    command: python ~/get-pip.py
+    delegate_to: "{{ item }}"
+    remote_user: "root"
+    with_items: "{{ groups['vsds'] }}"
+    register: install_pip
+    changed_when: "'Requirement already up-to-date' not in install_pip.stdout"
+
   - name: Install pexpect on VSD
     pip:
       name: pexpect
