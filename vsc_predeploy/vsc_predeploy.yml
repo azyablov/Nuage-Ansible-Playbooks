@@ -1,5 +1,5 @@
 ---
-- hosts: vscs[0]
+- hosts: vscs
   gather_facts: False
   remote_user: root
   become: no
