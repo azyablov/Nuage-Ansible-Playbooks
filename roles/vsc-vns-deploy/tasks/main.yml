@@ -227,20 +227,20 @@
     register: vsd_cert_man_xmpp
     when: xmpp.username is defined and pip_version|success
 
-  - name: Create and transfer certs from VSD using shell+expect
-    shell: |
-      set timeout 55
-      spawn /opt/vsd/ejbca/deploy/certMgmt.sh -a generate -u {{xmpp.username}} -c {{xmpp.username}} -d {{hostname}} -f pem -t server -s {{vsc.user}}@{{bof.mgmt_ip}}:/ -o csp
-      sleep 3
-      expect "password:"
-      send "{{ vsc.password }}\n"
-      sleep 10
-      exit 0
-    args:
-      executable: /usr/bin/expect
-    delegate_to: "{{ groups['vsds'][0] }}"
-    remote_user: "root"
-    when: xmpp.username is defined and pip_version|failed
+#  - name: Create and transfer certs from VSD using shell+expect
+#    shell: |
+#      set timeout 55
+#      spawn /opt/vsd/ejbca/deploy/certMgmt.sh -a generate -u {{xmpp.username}} -c {{xmpp.username}} -d {{hostname}} -f pem -t server -s {{vsc.user}}@{{bof.mgmt_ip}}:/ -o csp
+#      sleep 5
+#      expect "password:"
+#      send "{{ vsc.password }}\n"
+#      sleep 10
+#      exit 0
+#    args:
+#      executable: /usr/bin/expect
+#    delegate_to: "{{ groups['vsds'][0] }}"
+#    remote_user: "root"
+#    when: xmpp.username is defined and pip_version|failed
 
 # SROS config block
 #    system
