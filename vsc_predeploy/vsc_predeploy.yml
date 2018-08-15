@@ -6,8 +6,8 @@
   serial: 1
 
   tasks:
-    - import_role:
-        name: vsc-predeploy
     #- import_role:
-    #    name: vsc-vns-deploy
+    #    name: vsc-predeploy
+    - import_role:
+        name: vsc-vns-deploy
 
