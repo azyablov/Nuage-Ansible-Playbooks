@@ -4,8 +4,8 @@ target_server_username: root
 ansible_sudo_username: root
 
 # PRE-DEPLOY: Common vars, specific to be defined per host. Mandatory. Comes from METRO.
-mgmt_bridge: nullman
-data_bridge: nulldata
+mgmt_bridge: virbr-mgmt
+data_bridge: virbr-underlay1
 
 # PRE-DEPLOY: Default bridge paramenters. Can be defined per VSC to override.
 bridge_config:
@@ -16,11 +16,12 @@ bridge_config:
 # PRE-DEPLOY: Mandatory parameter that comes from METRO
 vsc_partition: /dev/sda1
 # PRE-DEPLOY/DEPLOY: Mandatory parameter that comes from METRO
-vsd_fqdn: vsd.int.nuage.cf
+vsd_fqdn: vsd1a.nuage.cf
 # PRE-DEPLOY/DEPLOY: Optional parameter that comes from METRO
 yum_proxy: 'NONE'
 
 # PRE-DEPLOY: Metro vars
 images_path: /home/vms
-vsc_qcow2_path: /home/soft/5.2.1/unpacked/vsc/single_disk
+vsc_qcow2_path: /home/soft/5.2.3/unzip/vsc/single_disk
 vsc_qcow2_file_name: vsc_singledisk.qcow2
+...
