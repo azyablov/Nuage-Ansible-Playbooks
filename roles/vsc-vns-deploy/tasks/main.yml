@@ -57,7 +57,7 @@
   wait_for:
     port: 22
     host: "{{ bof.mgmt_ip }}"
-    search_regex: OpenSSH
+    search_regex: SSH-2.0-OpenSSH
     delay: 3
   remote_user: "root"
   delegate_to: "{{ item }}"
