@@ -38,11 +38,11 @@
     var: |
       "{{start_slack}}"
 
-- name: Stop execution
-  fail:
-    msg: "break point"
-  when: True
-
+#- name: Stop execution
+#  fail:
+#    msg: "break point"
+#  when: True
+#
 
 - name: Check that VSDs are available
   wait_for:
